@@ -1,66 +1,59 @@
-import asyncio
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.types import Tool, TextContent
+#!/usr/bin/env python3
+"""
+MCP Server Implementation - Spec 2026-07-28 (Stateless Architecture)
 
-# Nome do servidor e descrição
-SERVER_NAME = "Python-Adder-Server"
-SERVER_VERSION = "1.0.0"
+Features:
+- Stateless Core: No session state maintained, no Mcp-Session-Id header required.
+- Direct Request Processing: Each tool invocation receives explicit arguments and returns stateless results.
+- Extended Math Tools: soma, subtracao, multiplicacao, divisao, potencia, raiz_quadrada, resto_divisao.
+"""
 
-# Inicializa o servidor com a especificação stateless
-# O SDK atualizado lida com a ausência de handshake de sessão automaticamente
-app = Server(SERVER_NAME)
+import math
+from mcp.server.fastmcp import FastMCP
 
-@app.list_tools()
-async def list_tools() -> list[Tool]:
-    """
-    Lista as ferramentas disponíveis.
-    Na nova spec 2026-07-28, a lista de ferramentas agora suporta cache (ttlMs),
-    mas aqui definimos a estrutura básica.
-    """
-    return [
-        Tool(
-            name="soma",
-            description="Soma dois números inteiros fornecidos pelo usuário.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "a": {"type": "integer", "description": "O primeiro número"},
-                    "b": {"type": "integer", "description": "O segundo número"}
-                },
-                "required": ["a", "b"]
-            }
-        )
-    ]
+# Create FastMCP server instance (Stateless Core Spec 2026-07-28)
+mcp = FastMCP("Stateless-Math-Server-2026-07-28")
 
-@app.call_tool()
-async def call_tool(name: str, arguments: dict) -> list[TextContent]:
-    """
-    Executa a ferramenta chamada.
-    Na nova arquitetura stateless, esta chamada ocorre sem dependência de sessão anterior.
-    """
-    if name == "soma":
-        try:
-            a = int(arguments.get("a", 0))
-            b = int(arguments.get("b", 0))
-            resultado = a + b
-            
-            # Retorna o resultado como conteúdo de texto
-            return [TextContent(type="text", text=f"O resultado de {a} + {b} é {resultado}")]
-        except (ValueError, TypeError) as e:
-            return [TextContent(type="text", text=f"Erro ao somar: {str(e)}")]
-    
-    raise ValueError(f"Ferramenta desconhecida: {name}")
+@mcp.tool()
+def soma(a: float, b: float) -> str:
+    """Soma dois números fornecidos pelo usuário statelessly."""
+    return f"O resultado de {a} + {b} é {a + b}"
 
-async def main():
-    # O servidor é executado via stdio (padrão para CLI)
-    # Não há configuração de sessão ou handshake inicial necessário
-    async with stdio_server() as (read_stream, write_stream):
-        await app.run(
-            read_stream,
-            write_stream,
-            app.create_initialization_options()
-        )
+@mcp.tool()
+def subtracao(a: float, b: float) -> str:
+    """Subtrai o segundo número do primeiro (a - b)."""
+    return f"O resultado de {a} - {b} é {a - b}"
+
+@mcp.tool()
+def multiplicacao(a: float, b: float) -> str:
+    """Multiplica dois números."""
+    return f"O resultado de {a} * {b} é {a * b}"
+
+@mcp.tool()
+def divisao(a: float, b: float) -> str:
+    """Divide o primeiro número pelo segundo (a / b)."""
+    if b == 0:
+        return "Erro: Divisão por zero não é permitida."
+    return f"O resultado de {a} / {b} é {a / b}"
+
+@mcp.tool()
+def potencia(base: float, expoente: float) -> str:
+    """Eleva a base ao expoente (base ^ expoente)."""
+    return f"O resultado de {base} ^ {expoente} é {math.pow(base, expoente)}"
+
+@mcp.tool()
+def raiz_quadrada(a: float) -> str:
+    """Calcula a raiz quadrada de um número positivo."""
+    if a < 0:
+        return "Erro: Não é possível calcular raiz quadrada de número negativo."
+    return f"A raiz quadrada de {a} é {math.sqrt(a)}"
+
+@mcp.tool()
+def resto_divisao(a: int, b: int) -> str:
+    """Calcula o resto da divisão inteira entre dois números (a % b)."""
+    if b == 0:
+        return "Erro: Divisão por zero não é permitida."
+    return f"O resto da divisão de {a} por {b} é {a % b}"
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    mcp.run()
